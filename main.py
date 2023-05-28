@@ -1,24 +1,50 @@
 #!/usr/bin/env python3
 
+from device import *
+
 from PicoscenesToolbox.picoscenes import Picoscenes
+
+from tqdm import tqdm
 
 import numpy as np
 
-from datetime import datetime
 from pathlib import Path
-from tqdm import tqdm
 
 import argparse
-import pickle
-import json
 
-deviceMap = {
-    0x2000: "AX200",
-    0x2100: "AX210",
-    0x5300: "IWL5300",
-    0x9300: "QCA9300",
-    0x1234: "USRP"
-}
+
+def pico2Numpy(picoRaw: list[dict], type: str) -> np.ndarray:
+  assert type in ("csi", "mag", "phase")
+
+  map = {"csi": "CSI", "mag": "Mag", "phase": "Phase"}
+  dataList: list[np.ndarray] = []
+
+  for raw in tqdm(picoRaw):
+    # Parse CSI
+    deviceId: int = raw["CSI"]["DeviceType"]
+    cbw: int = raw["CSI"]["CBW"]
+    device: str = deviceMap[deviceId]
+    subcarrierIndex = subcarrierList[device][str(cbw)]
+
+    nS: int = raw["CSI"]["numTones"]
+    nTx: int = raw["CSI"]["numTx"]
+    nRx: int = raw["CSI"]["numRx"]
+    shape: tuple = (nS, nTx, nRx)
+
+    # PicoscenesToolbox always interpolate the missing subcarrier
+    # Extract non-interpolated CSI
+    picoSubcarrierIndex: list[int] = raw["CSI"]["SubcarrierIndex"]
+    picoData = np.array(raw["CSI"][map[type]]).reshape(shape)
+    realData: list[np.ndarray] = []
+
+    for idx in subcarrierIndex:
+      realSubIndex = picoSubcarrierIndex.index(idx)
+      realData.append(picoData[realSubIndex])
+
+    realNdarray = np.array(realData)
+    dataList.append(realNdarray)
+
+  return np.array(dataList)
 
 
 def parseCli():
@@ -29,83 +55,32 @@ def parseCli():
   return args
 
 
-def parseCsi(inPath: Path, outDir: Path):
-  rawList: list = []
+def parsePico(inPath: Path, outDir: Path):
+  outDir.mkdir(parents=True, exist_ok=True)
 
-  csiList: list[np.ndarray] = []
-  magList: list[np.ndarray] = []
-  phaseList: list[np.ndarray] = []
-  timestampList: list[datetime] = []
+  picoFrames = Picoscenes(str(inPath))
 
-  frames = Picoscenes(str(inPath))
-  startTime: datetime = None
-  startTimeStr: str = ""
-
-  with open("subcarrier-index.json", "rt") as f:
-    deviceIndex = json.load(f)
-
-  for raw in tqdm(frames.raw):
-    rawDevice: int = raw["CSI"]["DeviceType"]
-    cbw: int = raw["CSI"]["CBW"]
-    device: str = deviceMap[rawDevice]
-    subcarrierIndex = tuple(deviceIndex[device][str(cbw)])
-
-    nSub: int = raw["CSI"]["numTones"]
-    nTx: int = raw["CSI"]["numTx"]
-    nRx: int = raw["CSI"]["numRx"]
-    sciShape: tuple = (nSub, nTx, nRx)
-
-    # PicoscenesToolbox always interpolate the missing subcarrier
-    interpolatedSubIndex: list[int] = raw["CSI"]["SubcarrierIndex"]
-    interpolatedCsi = np.array(raw["CSI"]["CSI"]).reshape(sciShape)
-    interpolatedMag = np.array(raw["CSI"]["Mag"]).reshape(sciShape)
-    interpolatedPhase = np.array(raw["CSI"]["Phase"]).reshape(sciShape)
-
-    # Extract non-interpolated CSI
-    realCsi: list[np.ndarray] = []
-    realMag: list[np.ndarray] = []
-    realPhase: list[np.ndarray] = []
-    for idx in subcarrierIndex:
-      realSubIndex = interpolatedSubIndex.index(idx)
-      realCsi.append(interpolatedCsi[realSubIndex])
-      realMag.append(interpolatedMag[realSubIndex])
-      realPhase.append(interpolatedPhase[realSubIndex])
-
-    rawList.append(raw)
-
-    csiList.append(np.concatenate(realCsi))
-    magList.append(np.concatenate(realMag))
-    phaseList.append(np.concatenate(realPhase))
-
+  print(f"Saving timestamp...")
+  timestampList: list[np.datetime64] = []
+  for raw in tqdm(picoFrames.raw):
+    # Parse timesteamp
     rawTimesteampNs: int = raw["RxSBasic"]["systemns"]
-    rawTimesteampS = rawTimesteampNs / 1e9
-    timestamp = datetime.fromtimestamp(rawTimesteampS).astimezone()
+    timestamp = np.datetime64(rawTimesteampNs, "ns")
     timestampList.append(timestamp)
+  np.save(str(outDir / "timestamp.npy"), timestampList)
 
-    if startTime == None:
-      startTime = timestamp
-      startTimeStr = startTime.isoformat().replace(":", ";")
+  print(f"Saving CSI...")
+  saveCsi(outDir, picoFrames.raw, "csi")
+  print(f"Saving mag...")
+  saveCsi(outDir, picoFrames.raw, "mag")
+  print(f"Saving phase...")
+  saveCsi(outDir, picoFrames.raw, "phase")
 
-  print("Saving...")
 
-  outSubDir = outDir / f"[{startTimeStr}]"
-  outSubDir.mkdir(parents=True, exist_ok=True)
-  outCsiPath = outSubDir / "csi.npy"
-  outMagPath = outSubDir / "mag.npy"
-  outPhasePath = outSubDir / "phase.npy"
-  outTimestamp = outSubDir / "timestamp.txt"
-  outRawPath = outSubDir / "raw.pkl"
-
-  with open(outRawPath, "wb") as file:
-    pickle.dump(rawList, file)
-
-  np.save(outCsiPath, csiList)
-  np.save(outMagPath, magList)
-  np.save(outPhasePath, phaseList)
-
-  with open(outTimestamp, "wt") as timestampFile:
-    for timestamp in timestampList:
-      timestampFile.write(timestamp.isoformat() + "\n")
+def saveCsi(outDir: Path, picoRaw: list[dict], type: str):
+  outPath = outDir / f"{type}.npy"
+  dataArray = pico2Numpy(picoRaw, type)
+  np.save(str(outPath), dataArray)
 
 
 if __name__ == "__main__":
@@ -116,5 +91,5 @@ if __name__ == "__main__":
   outDir = Path(cliArgs.output)
 
   for rawPath in inDir.glob("*.csi"):
-    print(f"Processing {rawPath.name}...")
-    parseCsi(rawPath, Path(outDir))
+    print(f"Parsing {rawPath.name}...")
+    parsePico(rawPath, outDir / rawPath.stem)
