@@ -1,95 +1,84 @@
 #!/usr/bin/env python3
 
 from device import *
+from parsecli import *
 
 from PicoscenesToolbox.picoscenes import Picoscenes
-
 from tqdm import tqdm
-
 import numpy as np
 
 from pathlib import Path
 
-import argparse
 
+def picoFrame2numpy(frameRaw: dict, type: str, interpolate: bool):
+  assert type in ("csi", "amp", "phase", "timestamp")
 
-def pico2Numpy(picoRaw: list[dict], type: str) -> np.ndarray:
-  assert type in ("csi", "mag", "phase")
+  # Parse timestamp
+  if type == "timestamp":
+    rawTimesteampNs: int = frameRaw["RxSBasic"]["systemns"]
+    timestamp = np.datetime64(rawTimesteampNs, "ns")
+    return timestamp
 
-  map = {"csi": "CSI", "mag": "Mag", "phase": "Phase"}
-  dataList: list[np.ndarray] = []
-
-  for raw in tqdm(picoRaw):
-    # Parse CSI
-    deviceId: int = raw["CSI"]["DeviceType"]
-    cbw: int = raw["CSI"]["CBW"]
+  # Parse CSI
+  else:
+    typeMap = {"csi": "CSI", "amp": "Mag", "phase": "Phase"}
+    deviceId: int = frameRaw["CSI"]["DeviceType"]
+    cbw: int = frameRaw["CSI"]["CBW"]
     device: str = deviceMap[deviceId]
-    subcarrierIndex = subcarrierList[device][str(cbw)]
 
-    nS: int = raw["CSI"]["numTones"]
-    nTx: int = raw["CSI"]["numTx"]
-    nRx: int = raw["CSI"]["numRx"]
+    nS: int = frameRaw["CSI"]["numTones"]
+    nTx: int = frameRaw["CSI"]["numTx"]
+    nRx: int = frameRaw["CSI"]["numRx"]
     shape: tuple = (nS, nTx, nRx)
 
-    # PicoscenesToolbox always interpolate the missing subcarrier
-    # Extract non-interpolated CSI
-    picoSubcarrierIndex: list[int] = raw["CSI"]["SubcarrierIndex"]
-    picoData = np.array(raw["CSI"][map[type]]).reshape(shape)
-    realData: list[np.ndarray] = []
+    ## PicoscenesToolbox always interpolate the missing subcarrier
+    ## Extract non-interpolated CSI
+    picoCsi = np.array(frameRaw["CSI"][typeMap[type]]).reshape(shape)
 
-    for idx in subcarrierIndex:
-      realSubIndex = picoSubcarrierIndex.index(idx)
-      realData.append(picoData[realSubIndex])
-
-    realNdarray = np.array(realData)
-    dataList.append(realNdarray)
-
-  return np.array(dataList)
-
-
-def parseCli():
-  parser = argparse.ArgumentParser()
-  parser.add_argument("-i", "--input", type=str, metavar="", default="in")
-  parser.add_argument("-o", "--output", type=str, metavar="", default="out")
-  args = parser.parse_args()
-  return args
+    if interpolate:
+      return picoCsi
+    else:
+      picoSubcarrierIndex: list[int] = frameRaw["CSI"]["SubcarrierIndex"]
+      realSubcarrierIndex = subcarrierList[device][str(cbw)]
+      realCsi: list[np.ndarray] = []
+      for idx in realSubcarrierIndex:
+        realSubcarrier = picoSubcarrierIndex.index(idx)
+        realCsi.append(picoCsi[realSubcarrier])
+      return np.array(realCsi)
 
 
-def parsePico(inPath: Path, outDir: Path):
+def pico2Numpy(picoRaw: list[dict],
+               types: set[str],
+               interpolate: bool = False) -> dict[str, np.ndarray]:
+
+  outputDict: dict[str, np.ndarray] = dict.fromkeys(types)
+
+  # Parse each frame along timestep
+  for raw in tqdm(picoRaw, leave=False, desc="Frames"):
+    for type in types:
+      frameList = []
+      frame = picoFrame2numpy(raw, type, interpolate)
+      frameList.append(frame)
+      outputDict[type] = np.array(frameList)
+
+  return outputDict
+
+
+def parsePico(inPath: Path, outDir: Path, types: set[str]):
   outDir.mkdir(parents=True, exist_ok=True)
 
-  picoFrames = Picoscenes(str(inPath))
-
-  print(f"Saving timestamp...")
-  timestampList: list[np.datetime64] = []
-  for raw in tqdm(picoFrames.raw):
-    # Parse timesteamp
-    rawTimesteampNs: int = raw["RxSBasic"]["systemns"]
-    timestamp = np.datetime64(rawTimesteampNs, "ns")
-    timestampList.append(timestamp)
-  np.save(str(outDir / "timestamp.npy"), timestampList)
-
-  print(f"Saving CSI...")
-  saveCsi(outDir, picoFrames.raw, "csi")
-  print(f"Saving mag...")
-  saveCsi(outDir, picoFrames.raw, "mag")
-  print(f"Saving phase...")
-  saveCsi(outDir, picoFrames.raw, "phase")
-
-
-def saveCsi(outDir: Path, picoRaw: list[dict], type: str):
-  outPath = outDir / f"{type}.npy"
-  dataArray = pico2Numpy(picoRaw, type)
-  np.save(str(outPath), dataArray)
+  outputDict = pico2Numpy(Picoscenes(str(inPath)).raw, types)
+  for type, dataArray in outputDict.items():
+    filename = inPath.with_suffix(f".{type}.npy")
+    np.save(outDir / filename, dataArray)
 
 
 if __name__ == "__main__":
   scriptPath = Path(__file__).parent
 
-  cliArgs = parseCli()
-  inDir = Path(cliArgs.input)
-  outDir = Path(cliArgs.output)
+  config = parseCli()
+  inDir = Path(config.inDir)
+  outDir = Path(config.outDir)
 
-  for rawPath in inDir.glob("*.csi"):
-    print(f"Parsing {rawPath.name}...")
-    parsePico(rawPath, outDir / rawPath.stem)
+  for rawPath in tqdm(set(inDir.glob("*.csi")), desc="Files"):
+    parsePico(rawPath, outDir, config.types)
