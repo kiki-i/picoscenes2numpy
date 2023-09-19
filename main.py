@@ -69,7 +69,7 @@ def parsePico(inPath: Path, outDir: Path, types: set[str]):
 
   outputDict = pico2Numpy(Picoscenes(str(inPath)).raw, types)
   for type, dataArray in outputDict.items():
-    filename = inPath.with_suffix(f".{type}.npy")
+    filename = inPath.with_suffix(f".{type}.npy").name
     np.save(outDir / filename, dataArray)
 
 
