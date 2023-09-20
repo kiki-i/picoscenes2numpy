@@ -6,7 +6,7 @@ import argparse
 class Config:
   inDir: str
   outDir: str
-  types: set[str]
+  types: tuple
 
 
 def parseCli() -> Config:
@@ -70,4 +70,4 @@ def parseCli() -> Config:
   if args.timestamp:
     types.add("timestamp")
 
-  return Config(inDir=args.input, outDir=args.output, types=types)
+  return Config(inDir=args.input, outDir=args.output, types=tuple(types))

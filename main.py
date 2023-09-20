@@ -10,11 +10,12 @@ import numpy as np
 from pathlib import Path
 
 
-def picoFrame2numpy(frameRaw: dict, type: str, interpolate: bool):
-  assert type in ("csi", "amp", "phase", "timestamp")
+def picoFrame2numpy(frameRaw: dict, dataType: str,
+                    interpolate: bool) -> np.datetime64 | np.ndarray:
+  assert dataType in ("csi", "amp", "phase", "timestamp")
 
   # Parse timestamp
-  if type == "timestamp":
+  if dataType == "timestamp":
     rawTimesteampNs: int = frameRaw["RxSBasic"]["systemns"]
     timestamp = np.datetime64(rawTimesteampNs, "ns")
     return timestamp
@@ -33,7 +34,7 @@ def picoFrame2numpy(frameRaw: dict, type: str, interpolate: bool):
 
     ## PicoscenesToolbox always interpolate the missing subcarrier
     ## Extract non-interpolated CSI
-    picoCsi = np.array(frameRaw["CSI"][typeMap[type]]).reshape(shape)
+    picoCsi = np.array(frameRaw["CSI"][typeMap[dataType]]).reshape(shape)
 
     if interpolate:
       return picoCsi
@@ -48,34 +49,38 @@ def picoFrame2numpy(frameRaw: dict, type: str, interpolate: bool):
 
 
 def pico2Numpy(picoRaw: list[dict],
-               types: set[str],
+               types: tuple,
                interpolate: bool = False) -> dict[str, np.ndarray]:
 
-  outputList: dict[str, list] = {}
-  outputNp: dict[str, np.ndarray] = dict.fromkeys(types)
+  outputByType: dict[str, list[np.datetime64 | np.ndarray]] = {}
+  outputoutputByTypeNp: dict[str, np.ndarray] = dict.fromkeys(types)
 
-  for type in types:
-    outputList[type] = []
+  for dataType in types:
+    outputByType[dataType] = []
 
-  # Parse each frame along timestep
-  for raw in tqdm(picoRaw, leave=False, desc="Frames"):
-    for type in types:
-      frame = picoFrame2numpy(raw, type, interpolate)
-      outputList[type].append(frame)
+  # Parse each frame along reversed time axis
+  with tqdm(leave=False, desc="Frames") as pbar:
+    for _ in range(len(picoRaw)):
+      raw = picoRaw.pop()
+      for dataType in types:
+        frame = picoFrame2numpy(raw, dataType, interpolate)
+        outputByType[dataType].append(frame)
+      pbar.update()
 
-  for type in outputList.keys():
-    outputNp[type] = np.ndarray(outputList.pop(type))
+  for dataType in tuple(outputByType.keys()):
+    data = outputByType.pop(dataType)
+    outputoutputByTypeNp[dataType] = np.array(reversed(data))
+  return outputoutputByTypeNp
 
-  return outputNp
 
-
-def parsePico(inPath: Path, outDir: Path, types: set[str]):
+def saveNumpy(inPath: Path, outDir: Path, types: tuple):
   outDir.mkdir(parents=True, exist_ok=True)
 
-  outputDict = pico2Numpy(Picoscenes(str(inPath)).raw, types)
-  for type, dataNp in outputDict.items():
-    filename = inPath.with_suffix(f".{type}.npy").name
-    np.save(outDir / filename, dataNp)
+  outputByType = pico2Numpy(Picoscenes(str(inPath)).raw, types)
+  for dataType in tuple(outputByType.keys()):
+    data = outputByType.pop(dataType)
+    filename = inPath.with_suffix(f".{dataType}.npy").name
+    np.save(outDir / filename, data)
 
 
 if __name__ == "__main__":
@@ -85,5 +90,5 @@ if __name__ == "__main__":
   inDir = Path(config.inDir)
   outDir = Path(config.outDir)
 
-  for rawPath in tqdm(set(inDir.glob("*.csi")), desc="Files"):
-    parsePico(rawPath, outDir, config.types)
+  for rawPath in tqdm(tuple(inDir.glob("*.csi")), desc="Files"):
+    saveNumpy(rawPath, outDir, config.types)
