@@ -51,26 +51,31 @@ def pico2Numpy(picoRaw: list[dict],
                types: set[str],
                interpolate: bool = False) -> dict[str, np.ndarray]:
 
-  outputDict: dict[str, np.ndarray] = dict.fromkeys(types)
+  outputList: dict[str, list] = {}
+  outputNp: dict[str, np.ndarray] = dict.fromkeys(types)
+
+  for type in types:
+    outputList[type] = []
 
   # Parse each frame along timestep
   for raw in tqdm(picoRaw, leave=False, desc="Frames"):
     for type in types:
-      frameList = []
       frame = picoFrame2numpy(raw, type, interpolate)
-      frameList.append(frame)
-      outputDict[type] = np.array(frameList)
+      outputList[type].append(frame)
 
-  return outputDict
+  for type in outputList.keys():
+    outputNp[type] = np.ndarray(outputList.pop(type))
+
+  return outputNp
 
 
 def parsePico(inPath: Path, outDir: Path, types: set[str]):
   outDir.mkdir(parents=True, exist_ok=True)
 
   outputDict = pico2Numpy(Picoscenes(str(inPath)).raw, types)
-  for type, dataArray in outputDict.items():
+  for type, dataNp in outputDict.items():
     filename = inPath.with_suffix(f".{type}.npy").name
-    np.save(outDir / filename, dataArray)
+    np.save(outDir / filename, dataNp)
 
 
 if __name__ == "__main__":
