@@ -59,8 +59,9 @@ def pico2Numpy(picoRaw: list[dict],
     outputByType[dataType] = []
 
   # Parse each frame along reversed time axis
-  with tqdm(leave=False, desc="Frames") as pbar:
-    for _ in range(len(picoRaw)):
+  n = len(picoRaw)
+  with tqdm(total=len(picoRaw), leave=False, desc="Frames") as pbar:
+    for _ in range(n):
       raw = picoRaw.pop()
       for dataType in types:
         frame = picoFrame2numpy(raw, dataType, interpolate)
