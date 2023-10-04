@@ -53,7 +53,7 @@ def pico2Numpy(picoRaw: list[dict],
                interpolate: bool = False) -> dict[str, np.ndarray]:
 
   outputByType: dict[str, list[np.datetime64 | np.ndarray]] = {}
-  outputoutputByTypeNp: dict[str, np.ndarray] = dict.fromkeys(types)
+  outputByTypeNp: dict[str, np.ndarray] = dict.fromkeys(types)
 
   for dataType in types:
     outputByType[dataType] = []
@@ -70,8 +70,8 @@ def pico2Numpy(picoRaw: list[dict],
 
   for dataType in tuple(outputByType.keys()):
     data = outputByType.pop(dataType)
-    outputoutputByTypeNp[dataType] = np.array(reversed(data))
-  return outputoutputByTypeNp
+    outputByTypeNp[dataType] = np.array(reversed(data))
+  return outputByTypeNp
 
 
 def saveNumpy(inPath: Path, outDir: Path, types: tuple):
