@@ -9,8 +9,9 @@ import numpy as np
 from pathlib import Path
 
 
-def picoFrame2numpy(frameRaw: dict, dataType: str,
-                    interpolate: bool) -> np.datetime64 | np.ndarray:
+def picoFrame2numpy(
+  frameRaw: dict, dataType: str, interpolate: bool
+) -> np.datetime64 | np.ndarray:
   assert dataType in ("csi", "amp", "phase", "timestamp")
 
   # Parse timestamp
@@ -36,7 +37,7 @@ def picoFrame2numpy(frameRaw: dict, dataType: str,
       return picoCsi
     else:
       picoSubcarrierIdx: list[int] = frameRaw["CSI"]["SubcarrierIndex"]
-      interpolatedIdx: tuple = (-1, 0, 1) if cbw == 40 else (0,)
+      interpolatedIdx: frozenset = frozenset((-1, 0, 1) if cbw == 40 else (0,))
 
       realCsi: list[np.ndarray] = []
       for idx in picoSubcarrierIdx:
@@ -45,10 +46,9 @@ def picoFrame2numpy(frameRaw: dict, dataType: str,
       return np.array(realCsi)
 
 
-def pico2Numpy(picoRaw: list[dict],
-               types: tuple,
-               interpolate: bool = False) -> dict[str, np.ndarray]:
-
+def pico2Numpy(
+  picoRaw: list[dict], types: frozenset, interpolate: bool = False
+) -> dict[str, np.ndarray]:
   outputByType: dict[str, list[np.datetime64 | np.ndarray]] = {}
   outputByTypeNp: dict[str, np.ndarray] = dict.fromkeys(types)
 
@@ -67,7 +67,7 @@ def pico2Numpy(picoRaw: list[dict],
   return outputByTypeNp
 
 
-def saveNumpy(inPath: Path, outDir: Path, types: tuple):
+def saveNumpy(inPath: Path, outDir: Path, types: frozenset):
   outDir.mkdir(parents=True, exist_ok=True)
 
   outputByType = pico2Numpy(Picoscenes(str(inPath)).raw, types)
