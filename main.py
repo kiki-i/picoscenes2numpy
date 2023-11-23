@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from parsecli import *
+from parsecli import parseCli
 
 from PicoscenesToolbox.picoscenes import Picoscenes
 from tqdm import tqdm
@@ -9,16 +9,14 @@ import numpy as np
 from pathlib import Path
 
 
-def picoFrame2numpy(
-  frameRaw: dict, dataType: str, interpolate: bool
-) -> np.datetime64 | np.ndarray:
+def picoFrame2numpy(frameRaw: dict, dataType: str, interpolate: bool) -> np.ndarray:
   assert dataType in ("csi", "amp", "phase", "timestamp")
 
   # Parse timestamp
   if dataType == "timestamp":
     rawTimesteampNs: int = frameRaw["RxSBasic"]["systemns"]
     timestamp = np.datetime64(rawTimesteampNs, "ns")
-    return timestamp
+    return np.array(timestamp)
 
   # Parse CSI
   else:
@@ -36,45 +34,39 @@ def picoFrame2numpy(
     if interpolate:
       return picoCsi
     else:
-      picoSubcarrierIdx: list[int] = frameRaw["CSI"]["SubcarrierIndex"]
-      interpolatedIdx: frozenset = frozenset((-1, 0, 1) if cbw == 40 else (0,))
+      picoSubcarrierList = np.array(frameRaw["CSI"]["SubcarrierIndex"])
+      interpolatedSubcarrierList = (-1, 0, 1) if cbw == 40 else (0,)
+      realSubcarrierIdxList = np.nonzero(
+        ~np.in1d(picoSubcarrierList, interpolatedSubcarrierList)
+      )
 
-      realCsi: list[np.ndarray] = []
-      for idx in picoSubcarrierIdx:
-        if idx not in interpolatedIdx:
-          realCsi.append(picoCsi[picoSubcarrierIdx.index(idx)])
-      return np.array(realCsi)
+      return picoCsi[realSubcarrierIdxList]
 
 
 def pico2Numpy(
   picoRaw: list[dict], types: frozenset, interpolate: bool = False
 ) -> dict[str, np.ndarray]:
-  outputByType: dict[str, list[np.datetime64 | np.ndarray]] = {}
-  outputByTypeNp: dict[str, np.ndarray] = dict.fromkeys(types)
+  output: dict[str, list[np.ndarray]] = {}
 
   for dataType in types:
-    outputByType[dataType] = []
+    output[dataType] = []
 
   # Parse each frame along reversed time axis
   for raw in tqdm(picoRaw, leave=False, desc="Frames"):
     for dataType in types:
       frame = picoFrame2numpy(raw, dataType, interpolate)
-      outputByType[dataType].append(frame)
+      output[dataType].append(frame)
 
-  for dataType in tuple(outputByType.keys()):
-    data = outputByType.pop(dataType)
-    outputByTypeNp[dataType] = np.array(data)
-  return outputByTypeNp
+  return {k: np.array(v) for k, v in output.items()}
 
 
 def saveNumpy(inPath: Path, outDir: Path, types: frozenset):
   outDir.mkdir(parents=True, exist_ok=True)
 
-  outputByType = pico2Numpy(Picoscenes(str(inPath)).raw, types)
-  for dataType in tuple(outputByType.keys()):
-    data = outputByType.pop(dataType)
+  output = pico2Numpy(Picoscenes(str(inPath)).raw, types)
+  for dataType in output.keys():
     filename = inPath.with_suffix(f".{dataType}.npy").name
-    np.save(outDir / filename, data)
+    np.save(outDir / filename, output[dataType])
 
 
 if __name__ == "__main__":
