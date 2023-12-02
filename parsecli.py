@@ -38,13 +38,13 @@ def parseCli() -> Config:
     help="Enable complex CSI output",
   )
   parser.add_argument(
-    "-a",
-    "--amplitude",
+    "-m",
+    "--magnitude",
     metavar="",
     action="store_const",
     const=True,
     default=False,
-    help="Enable amplitude output",
+    help="Enable magnitude output",
   )
   parser.add_argument(
     "-p",
@@ -69,8 +69,8 @@ def parseCli() -> Config:
   types = set()
   if args.csi:
     types.add("csi")
-  if args.amplitude:
-    types.add("amp")
+  if args.magnitude:
+    types.add("mag")
   if args.phase:
     types.add("phase")
   if args.timestamp:

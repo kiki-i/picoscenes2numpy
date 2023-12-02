@@ -8,7 +8,7 @@ optional arguments:
   -i, --input      Specify input directory, default = "in"
   -o, --output     Specify output directory, default = "out"
   -c, --csi        Enable complex CSI output
-  -a, --amplitude  Enable amplitude output
+  -m, --magnitude  Enable magnitude output
   -p, --phase      Enable phase output
   -t, --timestamp  Enable timestamp output
 ```

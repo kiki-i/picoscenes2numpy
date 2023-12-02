@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 def picoFrame2numpy(frameRaw: dict, dataType: str, interpolate: bool) -> np.ndarray:
-  assert dataType in ("csi", "amp", "phase", "timestamp")
+  assert dataType in ("csi", "mag", "phase", "timestamp")
 
   # Parse timestamp
   if dataType == "timestamp":
@@ -20,7 +20,7 @@ def picoFrame2numpy(frameRaw: dict, dataType: str, interpolate: bool) -> np.ndar
 
   # Parse CSI
   else:
-    typeMap = {"csi": "CSI", "amp": "Mag", "phase": "Phase"}
+    typeMap = {"csi": "CSI", "mag": "Mag", "phase": "Phase"}
     cbw: int = frameRaw["CSI"]["CBW"]
 
     nS: int = frameRaw["CSI"]["numTones"]
