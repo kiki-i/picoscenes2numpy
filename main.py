@@ -61,17 +61,16 @@ def pico2Numpy(
 
 
 def saveNumpy(inPath: Path, outDir: Path, types: frozenset):
-  outDir.mkdir(parents=True, exist_ok=True)
+  if types:
+    outDir.mkdir(parents=True, exist_ok=True)
 
-  output = pico2Numpy(Picoscenes(str(inPath)).raw, types)
-  for dataType in output.keys():
-    filename = inPath.with_suffix(f".{dataType}.npy").name
-    np.save(outDir / filename, output[dataType])
+    output = pico2Numpy(Picoscenes(str(inPath)).raw, types)
+    for dataType in output.keys():
+      filename = inPath.with_suffix(f".{dataType}.npy").name
+      np.save(outDir / filename, output[dataType])
 
 
 if __name__ == "__main__":
-  scriptPath = Path(__file__).parent
-
   args = parseCli()
   inDir = Path(args.inDir).expanduser()
   outDir = Path(args.outDir).expanduser()
