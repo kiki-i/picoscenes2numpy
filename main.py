@@ -73,8 +73,8 @@ if __name__ == "__main__":
   scriptPath = Path(__file__).parent
 
   args = parseCli()
-  inDir = Path(args.inDir)
-  outDir = Path(args.outDir)
+  inDir = Path(args.inDir).expanduser()
+  outDir = Path(args.outDir).expanduser()
 
   for rawPath in tqdm(tuple(inDir.glob("*.csi")), desc="Files"):
     saveNumpy(rawPath, outDir, args.types)
