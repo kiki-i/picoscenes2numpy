@@ -10,7 +10,7 @@ class Config:
 
 
 def parseCli() -> Config:
-  description = "Convert PicoScenes data to numpy ndarray"
+  description = "Convert PicoScenes CSI data to numpy ndarray"
   parser = argparse.ArgumentParser(description=description)
   parser.add_argument(
     "-i",
@@ -53,7 +53,7 @@ def parseCli() -> Config:
     action="store_const",
     const=True,
     default=False,
-    help="Enable phase output",
+    help="Enable phase output (with cyclic shift delay removed)",
   )
   parser.add_argument(
     "-t",

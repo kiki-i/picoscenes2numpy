@@ -1,7 +1,7 @@
 # picoscenes2numpy
 
 ```
-Convert PicoScenes data to numpy ndarray
+Convert PicoScenes CSI data to numpy ndarray
 
 optional arguments:
   -h, --help       show this help message and exit
@@ -9,7 +9,7 @@ optional arguments:
   -o, --output     Specify output directory, default = "out"
   -c, --csi        Enable complex CSI output
   -m, --magnitude  Enable magnitude output
-  -p, --phase      Enable phase output
+  -p, --phase      Enable phase output (with cyclic shift delay removed)
   -t, --timestamp  Enable timestamp output
 ```
 
